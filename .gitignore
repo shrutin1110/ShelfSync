@@ -1,0 +1,25 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.log
+appsettings.Development.json
+
+## Secrets - NEVER commit these
+**/secrets.json
+**/*.pfx
+
+## Node
+node_modules/
+dist/
+.env
+.env.local
+
+## Docker
+.dockerignore
+
+## OS
+.DS_Store
+Thumbs.db
