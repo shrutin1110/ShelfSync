@@ -1,0 +1,6 @@
+@ShelfSync.Auth_HostAddress = http://localhost:5188
+
+GET {{ShelfSync.Auth_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

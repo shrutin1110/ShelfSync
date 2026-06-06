@@ -1,0 +1,6 @@
+@ShelfSync.Warehouse_HostAddress = http://localhost:5049
+
+GET {{ShelfSync.Warehouse_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

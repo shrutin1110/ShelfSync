@@ -1,0 +1,6 @@
+@ShelfSync.Notifications_HostAddress = http://localhost:5196
+
+GET {{ShelfSync.Notifications_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

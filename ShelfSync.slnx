@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ShelfSync.Auth/ShelfSync.Auth.csproj" />
+    <Project Path="src/ShelfSync.Notifications/ShelfSync.Notifications.csproj" />
+    <Project Path="src/ShelfSync.Orders/ShelfSync.Orders.csproj" />
+    <Project Path="src/ShelfSync.Shared/ShelfSync.Shared.csproj" />
+    <Project Path="src/ShelfSync.Warehouse/ShelfSync.Warehouse.csproj" />
+  </Folder>
+</Solution>
