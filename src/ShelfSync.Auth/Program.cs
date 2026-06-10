@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -5,10 +6,14 @@ using ShelfSync.Auth.Data;
 using ShelfSync.Auth.Services;
 using ShelfSync.Auth.Settings;
 using System.Text;
+using ShelfSync.Auth.Middleware;
+using ShelfSync.Auth.Repositories;
+using ShelfSync.Shared.Interfaces;
+using ShelfSync.Shared.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── 1. BIND SETTINGS ──────────────────────────────────────────
+// ── 1. SETTINGS ───────────────────────────────────────────────
 builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection("JwtSettings"));
 
@@ -19,14 +24,32 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // ── 3. SERVICES ───────────────────────────────────────────────
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<ITenantContext, TenantContext>();
+// Register repositories
+// AddScoped = one instance per request
+// Same request always gets the same repository instance
+// which means the same TenantContext is used throughout
+builder.Services.AddScoped<IUserRepository, UserRepository>();
 
-// ── 4. JWT AUTHENTICATION ─────────────────────────────────────
+// ── 4. AUTHENTICATION ─────────────────────────────────────────
 var jwtSettings = builder.Configuration
     .GetSection("JwtSettings")
     .Get<JwtSettings>()!;
 
 builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    })
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+    {
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+    })
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -41,13 +64,20 @@ builder.Services
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
+    })
+    .AddGoogle(options =>
+    {
+        options.ClientId =
+            builder.Configuration["Authentication:Google:ClientId"]!;
+        options.ClientSecret =
+            builder.Configuration["Authentication:Google:ClientSecret"]!;
+        options.CallbackPath = "/api/auth/google/callback";
+        options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     });
 
 builder.Services.AddAuthorization();
 
 // ── 5. SWAGGER ────────────────────────────────────────────────
-// Simple swagger — no JWT button for now
-// We will add JWT testing support later
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

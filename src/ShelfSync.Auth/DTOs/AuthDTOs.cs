@@ -35,3 +35,14 @@ public record AuthResponse(
     string Email,
     string Role,
     string TenantName);
+    
+// What we send back after successful Google login
+// Same as AuthResponse — user gets JWT tokens regardless
+// of whether they logged in with email or Google
+public record GoogleAuthResponse(
+    string AccessToken,
+    string RefreshToken,
+    string Email,
+    string Role,
+    string TenantName,
+    bool IsNewUser); // tells frontend if this is first time login
