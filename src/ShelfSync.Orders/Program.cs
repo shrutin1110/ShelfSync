@@ -1,23 +1,107 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using ShelfSync.Orders.Data;
+using ShelfSync.Orders.GraphQL.Mutations;
+using ShelfSync.Orders.GraphQL.Queries;
+using ShelfSync.Orders.GraphQL.Subscriptions;
+using ShelfSync.Shared.Interfaces;
+using ShelfSync.Shared.Middleware;
+using System.Text;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// ── 1. DATABASE ───────────────────────────────────────────────
+builder.Services.AddDbContext<OrdersDbContext>(options =>
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// ── 2. TENANT CONTEXT ─────────────────────────────────────────
+builder.Services.AddScoped<ITenantContext, TenantContextBase>();
+
+// ── 3. JWT AUTHENTICATION ─────────────────────────────────────
+var secretKey = builder.Configuration["JwtSettings:SecretKey"]!;
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(secretKey)),
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["JwtSettings:Audience"],
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                Console.WriteLine(
+                    $"TOKEN FAILED: {context.Exception.Message}");
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                Console.WriteLine("TOKEN VALIDATED SUCCESSFULLY");
+                return Task.CompletedTask;
+            },
+            // This is the key one for GraphQL
+            // GraphQL sends requests differently than REST
+            // This event fires when the token is being read
+            OnMessageReceived = context =>
+            {
+                Console.WriteLine(
+                    $"AUTH HEADER: {context.Request.Headers["Authorization"]}");
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+
+// ── 4. GRAPHQL ────────────────────────────────────────────────
+builder.Services
+    .AddGraphQLServer()
+    .AddQueryType()
+    .AddTypeExtension<OrderQuery>()
+    .AddTypeExtension<ProductQuery>()
+    .AddMutationType()
+    .AddTypeExtension<OrderMutation>()
+    .AddSubscriptionType()
+    .AddTypeExtension<OrderSubscription>()
+    .AddFiltering()
+    .AddSorting()
+    .AddProjections()
+    .AddInMemorySubscriptions()
+    .AddAuthorization()
+    .ModifyRequestOptions(opt =>
+        opt.IncludeExceptionDetails = true);
+
+
+// ── 5. CORS ───────────────────────────────────────────────────
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials());
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
-app.UseHttpsRedirection();
-
+app.UseCors("AllowFrontend");
+app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
-
+app.UseWebSockets();
+app.MapGraphQL();
 app.Run();

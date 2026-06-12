@@ -76,6 +76,7 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
 
 // ── 5. SWAGGER ────────────────────────────────────────────────
 builder.Services.AddControllers();
@@ -104,5 +105,6 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 app.Run();
