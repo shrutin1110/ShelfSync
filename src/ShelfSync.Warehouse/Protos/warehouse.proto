@@ -1,0 +1,100 @@
+// This line specifies which version of Protocol Buffers syntax
+// proto3 is the current standard — always use proto3
+syntax = "proto3";
+
+// The C# namespace where generated code will live
+option csharp_namespace = "ShelfSync.Warehouse.Grpc";
+
+// The package name — prevents naming conflicts
+// when multiple proto files are used together
+package warehouse;
+
+// ── SERVICE DEFINITION ────────────────────────────────────────
+// A service is like a C# interface
+// It defines what functions this gRPC server exposes
+service WarehouseService {
+
+  // Unary call: check and reserve stock
+  // Client sends ReserveRequest
+  // Server returns ReserveResponse
+  // Like a normal function call
+  rpc ReserveStock(ReserveRequest) returns (ReserveResponse);
+
+  // Unary call: release previously reserved stock
+  // Used when an order is cancelled
+  rpc ReleaseStock(ReleaseRequest) returns (ReleaseResponse);
+
+  // Unary call: get current inventory level for a product
+  rpc GetInventoryLevel(InventoryRequest) returns (InventoryResponse);
+
+  // Server streaming call: track picking and packing status
+  // Client sends one request
+  // Server streams multiple status updates back
+  // "stream" keyword before return type = server streaming
+  rpc TrackPickPack(TrackRequest) returns (stream PackingStatus);
+}
+
+// ── MESSAGE DEFINITIONS ───────────────────────────────────────
+// Messages are like C# classes — they define data structures
+// Every field has:
+//   type    → string, int32, bool, etc.
+//   name    → field name in snake_case
+//   number  → unique field identifier (never change these!)
+//              gRPC uses numbers not names in binary format
+
+// Request to reserve stock for an order
+message ReserveRequest {
+  string product_id = 1;    // Guid as string
+  string tenant_id = 2;     // which tenant
+  int32 quantity = 3;       // how many units to reserve
+  string order_id = 4;      // which order is reserving
+}
+
+// Response from reserve stock
+message ReserveResponse {
+  bool success = 1;                // was reservation successful?
+  string message = 2;             // human readable message
+  int32 remaining_quantity = 3;   // stock left after reservation
+}
+
+// Request to release reserved stock (order cancelled)
+message ReleaseRequest {
+  string product_id = 1;
+  string tenant_id = 2;
+  int32 quantity = 3;
+  string order_id = 4;
+}
+
+// Response from release stock
+message ReleaseResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Request to get inventory level
+message InventoryRequest {
+  string product_id = 1;
+  string tenant_id = 2;
+}
+
+// Response with inventory level
+message InventoryResponse {
+  string product_id = 1;
+  int32 quantity_available = 2;
+  string aisle = 3;
+  string shelf = 4;
+}
+
+// Request to start tracking pick and pack
+message TrackRequest {
+  string order_id = 1;
+  string tenant_id = 2;
+}
+
+// Status update streamed back during pick and pack
+message PackingStatus {
+  string order_id = 1;
+  string status = 2;      // PICKING, PACKED, READY_TO_SHIP
+  string message = 3;     // human readable update
+  string timestamp = 4;   // when this status occurred
+}

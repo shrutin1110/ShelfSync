@@ -8,11 +8,20 @@ using ShelfSync.Orders.GraphQL.Subscriptions;
 using ShelfSync.Shared.Interfaces;
 using ShelfSync.Shared.Middleware;
 using System.Text;
+using ShelfSync.Orders.DataLoaders;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ── 1. DATABASE ───────────────────────────────────────────────
+// AddDbContextFactory in addition to AddDbContext
+// AddDbContext         → for regular service injection (Scoped)
+// AddDbContextFactory  → for DataLoader (creates fresh contexts per batch)
+// Both are needed — they serve different purposes
 builder.Services.AddDbContext<OrdersDbContext>(options =>
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddDbContextFactory<OrdersDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -83,7 +92,9 @@ builder.Services
     .AddInMemorySubscriptions()
     .AddAuthorization()
     .ModifyRequestOptions(opt =>
-        opt.IncludeExceptionDetails = true);
+        opt.IncludeExceptionDetails = true)
+    .AddDataLoader<ProductDataLoader>()      // ← add this
+    .AddDataLoader<OrderItemDataLoader>();  
 
 
 // ── 5. CORS ───────────────────────────────────────────────────
