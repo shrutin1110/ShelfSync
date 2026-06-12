@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ShelfSync.Shared\ShelfSync.Shared.csproj" />
+    <ProjectReference Include="..\ShelfSync.Warehouse\ShelfSync.Warehouse.csproj" />
   </ItemGroup>
 
 </Project>

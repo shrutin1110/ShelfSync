@@ -9,6 +9,7 @@ using ShelfSync.Shared.Interfaces;
 using ShelfSync.Shared.Middleware;
 using System.Text;
 using ShelfSync.Orders.DataLoaders;
+using ShelfSync.Orders.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,7 +24,8 @@ builder.Services.AddDbContext<OrdersDbContext>(options =>
 
 builder.Services.AddDbContextFactory<OrdersDbContext>(options =>
     options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+        builder.Configuration.GetConnectionString("DefaultConnection")),
+    ServiceLifetime.Scoped);
 
 // ── 2. TENANT CONTEXT ─────────────────────────────────────────
 builder.Services.AddScoped<ITenantContext, TenantContextBase>();
@@ -74,6 +76,9 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+// Register warehouse gRPC client service
+// Scoped because it is used per request
+builder.Services.AddScoped<IWarehouseService, WarehouseGrpcClient>();
 builder.Services.AddHttpContextAccessor();
 
 // ── 4. GRAPHQL ────────────────────────────────────────────────

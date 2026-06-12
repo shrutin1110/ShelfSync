@@ -27,4 +27,8 @@
     <ProjectReference Include="..\ShelfSync.Shared\ShelfSync.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Middleware\" />
+  </ItemGroup>
+
 </Project>

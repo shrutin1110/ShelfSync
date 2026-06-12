@@ -7,7 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Grpc.AspNetCore" Version="2.67.0" />
+        <PackageReference Include="Grpc.AspNetCore" Version="2.80.0" />
+        <PackageReference Include="Grpc.Net.Client" Version="2.80.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.8" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.8" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
@@ -17,7 +18,7 @@
         <!-- This tells gRPC tools to generate server code from this proto -->
         <!-- GrpcServices="Server" = generate the server base class -->
         <!-- GrpcServices="Client" = generate the client class (for Orders) -->
-        <Protobuf Include="Protos/warehouse.proto" GrpcServices="Server" />
+        <Protobuf Include="Protos/warehouse.proto" GrpcServices="Both" />
     </ItemGroup>
 
     <ItemGroup>

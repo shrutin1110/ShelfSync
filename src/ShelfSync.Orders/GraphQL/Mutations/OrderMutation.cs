@@ -2,6 +2,7 @@ using HotChocolate.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using ShelfSync.Orders.Data;
 using ShelfSync.Orders.DTOs;
+using ShelfSync.Orders.Services;
 using ShelfSync.Shared.Entities;
 using ShelfSync.Shared.Enums;
 using ShelfSync.Shared.Interfaces;
@@ -11,98 +12,148 @@ namespace ShelfSync.Orders.GraphQL.Mutations;
 [MutationType]
 public class OrderMutation
 {
-    // placeOrder mutation
-    // Client sends: { items: [...], notes: "..." }
-    // Server creates order and returns result
     public async Task<PlaceOrderResult> PlaceOrder(
-        PlaceOrderInput input,
-        OrdersDbContext db,
-        ITenantContext tenantContext)
+    PlaceOrderInput input,
+    OrdersDbContext db,
+    ITenantContext tenantContext,
+    IWarehouseService warehouseService, // ← inject warehouse service
+    [Service] IHttpContextAccessor httpContextAccessor)
+{
+    // Read the real UserId from the JWT token
+    var userIdClaim = httpContextAccessor.HttpContext?
+        .User?.FindFirst(System.Security.Claims.ClaimTypes
+            .NameIdentifier)?.Value;
+    
+    if (string.IsNullOrEmpty(userIdClaim))
     {
-        // Validate input — must have at least one item
-        if (input.Items is null || !input.Items.Any())
+        return new PlaceOrderResult(
+            Success: false,
+            ErrorMessage: "User not authenticated.",
+            OrderId: null);
+    }
+
+    var userId = Guid.Parse(userIdClaim);
+    if (input.Items is null || !input.Items.Any())
+    {
+        return new PlaceOrderResult(
+            Success: false,
+            ErrorMessage: "Order must have at least one item.",
+            OrderId: null);
+    }
+
+    decimal totalAmount = 0;
+    var orderItems = new List<OrderItem>();
+    var reservedItems = new List<(Guid ProductId, int Quantity)>();
+
+    // Generate order ID upfront
+    // We need it for the gRPC reservation call
+    var orderId = Guid.NewGuid();
+
+    foreach (var item in input.Items)
+    {
+        // Verify product exists in database
+        var product = await db.Products
+            .FirstOrDefaultAsync(p =>
+                p.Id == item.ProductId &&
+                p.TenantId == tenantContext.TenantId &&
+                p.IsActive);
+
+        if (product is null)
         {
+            // Release any already reserved stock
+            // before returning error
+            await ReleaseReservedStock(
+                reservedItems,
+                tenantContext.TenantId,
+                orderId,
+                warehouseService);
+
             return new PlaceOrderResult(
                 Success: false,
-                ErrorMessage: "Order must have at least one item.",
+                ErrorMessage:
+                    $"Product {item.ProductId} not found.",
                 OrderId: null);
         }
 
-        // Calculate total and verify products exist
-        decimal totalAmount = 0;
-        var orderItems = new List<OrderItem>();
+        // ── GRPC CALL TO WAREHOUSE ─────────────────────────
+        // This is the key new step
+        // Call Warehouse service to reserve stock
+        var reservation = await warehouseService
+            .ReserveStockAsync(
+                productId: product.Id,
+                tenantId: tenantContext.TenantId,
+                quantity: item.Quantity,
+                orderId: orderId);
 
-        foreach (var item in input.Items)
+        if (!reservation.Success)
         {
-            // Verify product exists and belongs to this tenant
-            var product = await db.Products
-                .FirstOrDefaultAsync(p =>
-                    p.Id == item.ProductId &&
-                    p.TenantId == tenantContext.TenantId &&
-                    p.IsActive);
+            // Stock not available
+            // Release any stock we already reserved
+            await ReleaseReservedStock(
+                reservedItems,
+                tenantContext.TenantId,
+                orderId,
+                warehouseService);
 
-            if (product is null)
-            {
-                return new PlaceOrderResult(
-                    Success: false,
-                    ErrorMessage: $"Product {item.ProductId} not found.",
-                    OrderId: null);
-            }
-
-            // Check stock availability
-            if (product.StockQuantity < item.Quantity)
-            {
-                return new PlaceOrderResult(
-                    Success: false,
-                    ErrorMessage: $"Insufficient stock for {product.Name}.",
-                    OrderId: null);
-            }
-
-            // Snapshot the price at time of order
-            // Never use current price — it might change tomorrow
-            var orderItem = new OrderItem
-            {
-                ProductId = product.Id,
-                Quantity = item.Quantity,
-                UnitPrice = product.Price // snapshot
-            };
-
-            orderItems.Add(orderItem);
-            totalAmount += product.Price * item.Quantity;
-
-            // Reduce stock
-            product.StockQuantity -= item.Quantity;
+            return new PlaceOrderResult(
+                Success: false,
+                ErrorMessage: reservation.Message,
+                OrderId: null);
         }
 
-        // Create the order
-        var order = new Order
+        // Track what we reserved so we can release
+        // if a later item fails
+        reservedItems.Add((product.Id, item.Quantity));
+
+        var orderItem = new OrderItem
         {
-            TenantId = tenantContext.TenantId,
-
-            // For now use a placeholder UserId
-            // On Day 14 when React sends JWT
-            // we will extract real UserId from token
-            UserId = Guid.Empty,
-
-            Status = OrderStatus.Pending,
-            TotalAmount = totalAmount,
-            Notes = input.Notes,
-            Items = orderItems
+            ProductId = product.Id,
+            Quantity = item.Quantity,
+            UnitPrice = product.Price
         };
 
-        db.Orders.Add(order);
-
-        // SaveChangesAsync saves BOTH the order
-        // AND the stock reduction in one transaction
-        // Either both succeed or neither does
-        await db.SaveChangesAsync();
-
-        
-        return new PlaceOrderResult(
-            Success: true,
-            ErrorMessage: null,
-            OrderId: order.Id);
+        orderItems.Add(orderItem);
+        totalAmount += product.Price * item.Quantity;
     }
+
+    // All items reserved successfully
+    // Now save the order to database
+    var order = new Order
+    {
+        Id = orderId, // use the same ID we used for reservations
+        TenantId = tenantContext.TenantId,
+        UserId = userId,
+        Status = OrderStatus.Confirmed, // Confirmed because stock is reserved
+        TotalAmount = totalAmount,
+        Notes = input.Notes,
+        Items = orderItems
+    };
+
+    db.Orders.Add(order);
+    await db.SaveChangesAsync();
+
+    return new PlaceOrderResult(
+        Success: true,
+        ErrorMessage: null,
+        OrderId: order.Id);
+}
+
+// Helper method to release all reserved stock on failure
+// Important for data consistency
+// If we reserved stock for items 1 and 2
+// but item 3 fails — we must release items 1 and 2
+private async Task ReleaseReservedStock(
+    List<(Guid ProductId, int Quantity)> reservedItems,
+    Guid tenantId,
+    Guid orderId,
+    IWarehouseService warehouseService)
+{
+    foreach (var (productId, quantity) in reservedItems)
+    {
+        await warehouseService.ReleaseStockAsync(
+            productId, tenantId, quantity, orderId);
+    }
+}
 
     // updateOrderStatus mutation
     // Changes order status with state machine validation

@@ -6,9 +6,9 @@ using ShelfSync.Auth.Data;
 using ShelfSync.Auth.Services;
 using ShelfSync.Auth.Settings;
 using System.Text;
-using ShelfSync.Auth.Middleware;
 using ShelfSync.Auth.Repositories;
 using ShelfSync.Shared.Interfaces;
+using ShelfSync.Shared.Middleware;
 using ShelfSync.Shared.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,7 +24,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // ── 3. SERVICES ───────────────────────────────────────────────
 builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<ITenantContext, TenantContextBase>();
 // Register repositories
 // AddScoped = one instance per request
 // Same request always gets the same repository instance
