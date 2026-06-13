@@ -243,4 +243,23 @@ private async Task ReleaseReservedStock(
 
         return product;
     }
+    
+    // Add this mutation to get a presigned URL
+// React calls this first, then uploads directly to S3
+    public async Task<UploadUrlResult> GetProductImageUploadUrl(
+        GetUploadUrlInput input,
+        ITenantContext tenantContext,
+        IS3Service s3Service)
+    {
+        var result = await s3Service
+            .GenerateProductImageUploadUrlAsync(
+                productId: input.ProductId,
+                tenantId: tenantContext.TenantId,
+                fileExtension: input.FileExtension);
+
+        return new UploadUrlResult(
+            UploadUrl: result.UploadUrl,
+            S3Key: result.S3Key,
+            ExpiresAt: result.ExpiresAt.ToString("o"));
+    }
 }

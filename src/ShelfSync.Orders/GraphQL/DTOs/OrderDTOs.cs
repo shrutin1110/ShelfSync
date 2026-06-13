@@ -29,3 +29,13 @@ public record AddProductInput(
     string SKU,
     decimal Price,
     int InitialStock);
+    
+// Add to OrderDTOs.cs
+public record GetUploadUrlInput(
+    Guid ProductId,
+    string FileExtension); // "jpg", "png", "webp"
+
+public record UploadUrlResult(
+    string UploadUrl,  // React PUTs file to this URL
+    string S3Key,      // save in Products.S3ImageKey
+    string ExpiresAt); // when this URL stops working   

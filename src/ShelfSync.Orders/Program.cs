@@ -8,8 +8,11 @@ using ShelfSync.Orders.GraphQL.Subscriptions;
 using ShelfSync.Shared.Interfaces;
 using ShelfSync.Shared.Middleware;
 using System.Text;
+using Amazon.S3;
 using ShelfSync.Orders.DataLoaders;
 using ShelfSync.Orders.Services;
+using ShelfSync.Orders.Settings;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,6 +82,25 @@ builder.Services.AddAuthorization();
 // Register warehouse gRPC client service
 // Scoped because it is used per request
 builder.Services.AddScoped<IWarehouseService, WarehouseGrpcClient>();
+
+// Bind AWS settings from configuration including User Secrets
+builder.Services.Configure<AwsSettings>(
+    builder.Configuration.GetSection("AWS"));
+
+// Read AWS credentials from configuration
+// This bridges .NET User Secrets → AWS SDK
+var awsOptions = builder.Configuration.GetAWSOptions();
+awsOptions.Credentials = new Amazon.Runtime.BasicAWSCredentials(
+    builder.Configuration["AWS:AccessKeyId"],
+    builder.Configuration["AWS:SecretAccessKey"]);
+awsOptions.Region = Amazon.RegionEndpoint.GetBySystemName(
+    builder.Configuration["AWS:Region"] ?? "us-east-1");
+
+builder.Services.AddDefaultAWSOptions(awsOptions);
+builder.Services.AddAWSService<IAmazonS3>();
+
+// Register S3 service
+builder.Services.AddScoped<IS3Service, S3Service>();
 builder.Services.AddHttpContextAccessor();
 
 // ── 4. GRAPHQL ────────────────────────────────────────────────
@@ -120,4 +142,5 @@ app.UseAuthorization();
 
 app.UseWebSockets();
 app.MapGraphQL();
+
 app.Run();
