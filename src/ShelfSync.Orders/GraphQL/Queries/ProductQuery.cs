@@ -1,5 +1,4 @@
-using Microsoft.EntityFrameworkCore;
-using ShelfSync.Orders.Data;
+using ShelfSync.Orders.Services;
 using ShelfSync.Shared.Entities;
 using ShelfSync.Shared.Interfaces;
 
@@ -8,34 +7,22 @@ namespace ShelfSync.Orders.GraphQL.Queries;
 [QueryType]
 public class ProductQuery
 {
-    [UseProjection]
-    [UseFiltering]
-    [UseSorting]
-    public IQueryable<Product> GetProducts(
-        OrdersDbContext db,
-        ITenantContext tenantContext)
+    // Now uses ProductService instead of hitting DB directly
+    // ProductService handles cache-aside automatically
+    public async Task<List<Product>> GetProducts(
+        ITenantContext tenantContext,
+        IProductService productService)
     {
-        return db.Products
-            .Where(p =>
-                p.TenantId == tenantContext.TenantId &&
-                p.IsActive);
+        return await productService
+            .GetProductsAsync(tenantContext.TenantId);
     }
 
     public async Task<Product?> GetProductById(
         Guid id,
-        OrdersDbContext db,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        IProductService productService)
     {
-        return await db.Products
-            .FirstOrDefaultAsync(p =>
-                p.Id == id &&
-                p.TenantId == tenantContext.TenantId &&
-                p.IsActive);
-    }
-    
-    public string GetDebugTenant(ITenantContext tenantContext)
-    {
-        return $"TenantId: {tenantContext.TenantId} | " +
-               $"IsAuthenticated: {tenantContext.IsAuthenticated}";
+        return await productService
+            .GetProductByIdAsync(id, tenantContext.TenantId);
     }
 }

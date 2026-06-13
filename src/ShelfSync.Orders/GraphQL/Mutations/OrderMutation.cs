@@ -267,7 +267,8 @@ private async Task ReleaseReservedStock(
     public async Task<Product> AddProduct(
         AddProductInput input,
         OrdersDbContext db,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        IProductService productService) // ← add this parameter
     {
         var product = new Product
         {
@@ -281,6 +282,12 @@ private async Task ReleaseReservedStock(
 
         db.Products.Add(product);
         await db.SaveChangesAsync();
+
+        // Invalidate the product catalog cache for this tenant
+        // Next products query will rebuild from database
+        // Including the new product
+        await productService
+            .InvalidateProductCacheAsync(tenantContext.TenantId);
 
         return product;
     }

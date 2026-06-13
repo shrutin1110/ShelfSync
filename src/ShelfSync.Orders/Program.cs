@@ -10,9 +10,11 @@ using ShelfSync.Shared.Middleware;
 using System.Text;
 using Amazon.S3;
 using Amazon.SQS;
+using ShelfSync.Orders.Cache;
 using ShelfSync.Orders.DataLoaders;
 using ShelfSync.Orders.Services;
 using ShelfSync.Orders.Settings;
+using StackExchange.Redis;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -90,6 +92,21 @@ builder.Services.Configure<AwsSettings>(
 
 builder.Services.Configure<SqsSettings>(builder.Configuration.GetSection("SQS"));
 
+// ── REDIS ─────────────────────────────────────────────────────
+// IConnectionMultiplexer is the Redis connection
+// Registered as Singleton because:
+//   - Expensive to create (TCP connection to Redis)
+//   - Thread-safe — safe to share across requests
+//   - StackExchange.Redis recommends Singleton
+var redisConnection = await ConnectionMultiplexer
+    .ConnectAsync(
+        builder.Configuration.GetConnectionString("Redis")
+        ?? "localhost:6379");
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(
+    redisConnection);
+
+
 // Read AWS credentials from configuration
 // This bridges .NET User Secrets → AWS SDK
 var awsOptions = builder.Configuration.GetAWSOptions();
@@ -107,6 +124,14 @@ builder.Services.AddAWSService<IAmazonSQS>();
 builder.Services.AddScoped<IS3Service, S3Service>();
 // Register SQS publisher
 builder.Services.AddScoped<ISqsPublisher, SqsPublisher>();
+
+// CacheService is Scoped
+// Each request gets its own CacheService instance
+// But they all share the same Singleton connection
+builder.Services.AddScoped<ICacheService, CacheService>();
+
+// Product service wraps DB + cache
+builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddHttpContextAccessor();
 
 // ── 4. GRAPHQL ────────────────────────────────────────────────
