@@ -9,6 +9,7 @@ using ShelfSync.Shared.Interfaces;
 using ShelfSync.Shared.Middleware;
 using System.Text;
 using Amazon.S3;
+using Amazon.SQS;
 using ShelfSync.Orders.DataLoaders;
 using ShelfSync.Orders.Services;
 using ShelfSync.Orders.Settings;
@@ -87,6 +88,8 @@ builder.Services.AddScoped<IWarehouseService, WarehouseGrpcClient>();
 builder.Services.Configure<AwsSettings>(
     builder.Configuration.GetSection("AWS"));
 
+builder.Services.Configure<SqsSettings>(builder.Configuration.GetSection("SQS"));
+
 // Read AWS credentials from configuration
 // This bridges .NET User Secrets → AWS SDK
 var awsOptions = builder.Configuration.GetAWSOptions();
@@ -98,9 +101,12 @@ awsOptions.Region = Amazon.RegionEndpoint.GetBySystemName(
 
 builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddAWSService<IAmazonS3>();
+builder.Services.AddAWSService<IAmazonSQS>();
 
 // Register S3 service
 builder.Services.AddScoped<IS3Service, S3Service>();
+// Register SQS publisher
+builder.Services.AddScoped<ISqsPublisher, SqsPublisher>();
 builder.Services.AddHttpContextAccessor();
 
 // ── 4. GRAPHQL ────────────────────────────────────────────────

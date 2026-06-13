@@ -2,6 +2,7 @@ using HotChocolate.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using ShelfSync.Orders.Data;
 using ShelfSync.Orders.DTOs;
+using ShelfSync.Orders.Events;
 using ShelfSync.Orders.Services;
 using ShelfSync.Shared.Entities;
 using ShelfSync.Shared.Enums;
@@ -16,7 +17,8 @@ public class OrderMutation
     PlaceOrderInput input,
     OrdersDbContext db,
     ITenantContext tenantContext,
-    IWarehouseService warehouseService, // ← inject warehouse service
+    IWarehouseService warehouseService,
+    ISqsPublisher sqsPublisher,
     [Service] IHttpContextAccessor httpContextAccessor)
 {
     // Read the real UserId from the JWT token
@@ -131,6 +133,31 @@ public class OrderMutation
 
     db.Orders.Add(order);
     await db.SaveChangesAsync();
+    
+    // ── PUBLISH SQS EVENTS ────────────────────────────────
+    // Build the event with order details
+    var orderCreatedEvent = new OrderCreatedEvent(
+        EventId: Guid.NewGuid(),
+        OrderId: order.Id,
+        TenantId: order.TenantId,
+        UserId: order.UserId,
+        TotalAmount: order.TotalAmount,
+        CreatedAt: order.CreatedAt,
+        Items: orderItems.Select(oi => new OrderCreatedEventItem(
+            ProductId: oi.ProductId,
+            ProductName: db.Products
+                .First(p => p.Id == oi.ProductId).Name,
+            Quantity: oi.Quantity,
+            UnitPrice: oi.UnitPrice
+        )).ToList()
+    );
+
+    // Publish to SQS — fire and forget
+    // We do not await these to keep the response fast
+    // Even if SQS publishing fails, the order is already saved
+    _ = sqsPublisher.PublishOrderCreatedAsync(orderCreatedEvent);
+    _ = sqsPublisher.PublishInvoiceGenerateAsync(
+        order.Id, order.TenantId);
 
     return new PlaceOrderResult(
         Success: true,
@@ -161,6 +188,7 @@ private async Task ReleaseReservedStock(
         UpdateOrderStatusInput input,
         OrdersDbContext db,
         ITenantContext tenantContext,
+        ISqsPublisher sqsPublisher,
        [Service] ITopicEventSender eventSender)
     {
         var order = await db.Orders
@@ -217,6 +245,19 @@ private async Task ReleaseReservedStock(
         await eventSender.SendAsync(
             "OrderStatusChanged",
             order);
+        
+        // Publish SQS event when order is shipped
+        if (input.NewStatus == OrderStatus.Shipped)
+        {
+            _ = sqsPublisher.PublishOrderShippedAsync(
+                new OrderShippedEvent(
+                    EventId: Guid.NewGuid(),
+                    OrderId: order.Id,
+                    TenantId: order.TenantId,
+                    UserId: order.UserId,
+                    ShippedAt: DateTime.UtcNow));
+        }
+
 
 
         return order;
