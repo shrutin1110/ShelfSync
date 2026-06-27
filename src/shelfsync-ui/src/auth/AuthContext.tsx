@@ -23,9 +23,10 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 // JWT payload shape
 interface JwtPayload {
-    nameid: string;
-    email: string;
-    role: string;
+    // .NET uses full URI claim names
+    'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier': string;
+    'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress': string;
+    'http://schemas.microsoft.com/ws/2008/06/identity/claims/role': string;
     tenantId: string;
     tenantName: string;
     plan: string;
@@ -52,8 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (!isExpired) {
                     setAccessToken(token);
                     setUser({
-                        email: decoded.email,
-                        role: decoded.role,
+                        email: decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'],
+                        role: decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'],
                         tenantName: decoded.tenantName,
                         tenantId: decoded.tenantId
                     });
@@ -85,8 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setAccessToken(newAccessToken);
         setUser({
-            email: decoded.email,
-            role: decoded.role,
+            email: decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'],
+            role: decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'],
             tenantName: decoded.tenantName,
             tenantId: decoded.tenantId
         });
