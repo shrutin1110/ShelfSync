@@ -1,5 +1,9 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="compose.yaml" />
+  </Folder>
   <Folder Name="/src/">
+    <File Path="src\Commands" />
     <Project Path="src/ShelfSync.Auth/ShelfSync.Auth.csproj" />
     <Project Path="src/ShelfSync.Lambda.InvoiceGenerator/ShelfSync.Lambda.InvoiceGenerator.csproj" />
     <Project Path="src/ShelfSync.Notifications/ShelfSync.Notifications.csproj" />

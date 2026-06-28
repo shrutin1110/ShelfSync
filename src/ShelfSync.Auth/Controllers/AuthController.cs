@@ -6,6 +6,7 @@ using ShelfSync.Shared.Entities;
 using ShelfSync.Shared.Repositories;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using ShelfSync.Shared.Interfaces;
 
@@ -105,6 +106,7 @@ public class AuthController : ControllerBase
         return Ok(await BuildAuthResponse(user, user.Tenant));
     }
 
+    /*
     // ── GOOGLE CALLBACK ───────────────────────────────────────
     [HttpGet("google")]
     public IActionResult GoogleLogin()
@@ -116,7 +118,8 @@ public class AuthController : ControllerBase
             };
         return Challenge(properties, "Google");
     }
-
+    */
+    
     [HttpGet("google/callback")]
     public async Task<IActionResult> GoogleCallback()
     {
@@ -197,6 +200,75 @@ public class AuthController : ControllerBase
             TenantName: tenant.Name);
     }
     
+    // Public endpoint — no auth required
+// Returns list of all tenants for storefront selector
+    [HttpGet("tenants")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetTenants()
+    {
+        var tenants = await _db.Tenants
+            .Select(t => new
+            {
+                t.Id,
+                t.Name
+            })
+            .OrderBy(t => t.Name)
+            .ToListAsync();
+
+        return Ok(tenants);
+    }
+    
+    // Issues a guest token for a specific tenant
+// Used by the storefront simulator
+// No user credentials needed — just tenant selection
+    [HttpPost("storefront-token")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetStorefrontToken(
+        [FromBody] StorefrontTokenRequest req)
+    {
+        var tenant = await _db.Tenants
+            .FirstOrDefaultAsync(t => t.Id == req.TenantId);
+
+        if (tenant is null)
+            return BadRequest(new { message = "Tenant not found." });
+
+        // Check if storefront user already exists for this tenant
+        var storefrontEmail =
+            $"storefront@{tenant.Name.ToLower().Replace(" ", "")}.com";
+
+        var storefrontUser = await _db.Users
+            .FirstOrDefaultAsync(u =>
+                u.Email == storefrontEmail &&
+                u.TenantId == tenant.Id);
+
+        // If not — create and save it
+        if (storefrontUser is null)
+        {
+            storefrontUser = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = storefrontEmail,
+                PasswordHash = BCrypt.Net.BCrypt
+                    .HashPassword(Guid.NewGuid().ToString()),
+                Role = "storefront",
+                TenantId = tenant.Id
+            };
+
+            _db.Users.Add(storefrontUser);
+            await _db.SaveChangesAsync();
+        }
+
+        var accessToken = _tokenService
+            .GenerateAccessToken(storefrontUser, tenant);
+
+        return Ok(new
+        {
+            accessToken,
+            tenantName = tenant.Name,
+            tenantId = tenant.Id
+        });
+    }
+    public record StorefrontTokenRequest(Guid TenantId);
     
     
     // ── TEST ENDPOINT ─────────────────────────────────────────────

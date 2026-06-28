@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import getClient from '../api/apolloClient';
 
-// ── GraphQL operations ────────────────────────────────────────
-
 const GET_PRODUCTS = `
   query {
     products {
@@ -40,8 +38,6 @@ const GET_UPLOAD_URL = `
   }
 `;
 
-// ── Types ─────────────────────────────────────────────────────
-
 interface Product {
     id: string;
     name: string;
@@ -59,8 +55,6 @@ interface ProductForm {
     initialStock: string;
 }
 
-// ── Main Component ────────────────────────────────────────────
-
 export default function ProductsPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
@@ -69,11 +63,9 @@ export default function ProductsPage() {
     const [showForm, setShowForm] = useState(false);
     const [formLoading, setFormLoading] = useState(false);
     const [formError, setFormError] = useState('');
-    const [selectedImage, setSelectedImage]
-        = useState<File | null>(null);
+    const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [uploadingImage, setUploadingImage] = useState(false);
-    const [successMessage, setSuccessMessage]
-        = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const [form, setForm] = useState<ProductForm>({
         name: '',
@@ -81,8 +73,9 @@ export default function ProductsPage() {
         price: '',
         initialStock: ''
     });
+    const [aisle, setAisle] = useState('A');
+    const [shelf, setShelf] = useState('1');
 
-    // Load products on page mount
     useEffect(() => {
         loadProducts();
     }, []);
@@ -95,22 +88,18 @@ export default function ProductsPage() {
                 .request<{ products: Product[] }>(GET_PRODUCTS);
             setProducts(result.products);
         } catch (err: any) {
-            setError('Failed to load products. ' +
-                'Make sure the Orders service is running.');
-            console.error('Load products error:', err);
+            setError('Failed to load products. Make sure the Orders service is running.');
         } finally {
             setLoading(false);
         }
     };
 
-    // Computed from state — not stored separately
     const filteredProducts = products.filter(p =>
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.sku.toLowerCase().includes(search.toLowerCase())
     );
 
-    const lowStockCount = products
-        .filter(p => p.stockQuantity < 10).length;
+    const lowStockCount = products.filter(p => p.stockQuantity < 10).length;
 
     const handleAddProduct = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -118,54 +107,46 @@ export default function ProductsPage() {
         setFormError('');
 
         try {
-            // Step 1 — Save product to database
             const result = await getClient()
                 .request<{ addProduct: Product }>(ADD_PRODUCT, {
                     input: {
                         name: form.name,
                         sku: form.sku,
                         price: parseFloat(form.price),
-                        initialStock: parseInt(form.initialStock)
+                        initialStock: parseInt(form.initialStock),
+                        aisle,
+                        shelf
                     }
                 });
 
             const newProduct = result.addProduct;
 
-            // Step 2 — Upload image if selected
             if (selectedImage) {
                 setUploadingImage(true);
                 await uploadProductImage(newProduct.id, selectedImage);
                 setUploadingImage(false);
             }
 
-            // Step 3 — Refresh list and reset form
             await loadProducts();
             setForm({ name: '', sku: '', price: '', initialStock: '' });
             setSelectedImage(null);
+            setAisle('A');
+            setShelf('1');
             setShowForm(false);
-            setSuccessMessage(
-                `"${newProduct.name}" added successfully!`);
-
-            // Clear success message after 3 seconds
+            setSuccessMessage(`"${newProduct.name}" added successfully!`);
             setTimeout(() => setSuccessMessage(null), 3000);
 
         } catch (err: any) {
-            setFormError(
-                err?.message ?? 'Failed to add product. Please try again.');
+            setFormError(err?.message ?? 'Failed to add product.');
         } finally {
             setFormLoading(false);
             setUploadingImage(false);
         }
     };
 
-    const uploadProductImage = async (
-        productId: string,
-        file: File
-    ) => {
+    const uploadProductImage = async (productId: string, file: File) => {
         try {
-            // Step 1 — Get presigned URL from your .NET API
             const ext = file.name.split('.').pop() ?? 'jpg';
-
             const urlResult = await getClient()
                 .request<{
                     productImageUploadUrl: {
@@ -177,35 +158,22 @@ export default function ProductsPage() {
                 });
 
             const { uploadUrl } = urlResult.productImageUploadUrl;
-
-            // Step 2 — Upload directly to S3
-            // File goes: browser → S3
-            // Your .NET server never touches the file
             const uploadResponse = await fetch(uploadUrl, {
                 method: 'PUT',
                 body: file,
                 headers: { 'Content-Type': file.type }
             });
 
-            if (!uploadResponse.ok) {
-                throw new Error('S3 upload failed');
-            }
-
-            console.log('Image uploaded to S3 successfully');
+            if (!uploadResponse.ok) throw new Error('S3 upload failed');
         } catch (err) {
             console.error('Image upload failed:', err);
-            // Image is optional — do not block product creation
         }
     };
-
-    // ── Render ────────────────────────────────────────────────
 
     if (loading) return (
         <Layout>
             <div style={styles.container}>
-                <div style={styles.loadingState}>
-                    Loading products...
-                </div>
+                <div style={styles.loadingState}>Loading products...</div>
             </div>
         </Layout>
     );
@@ -215,10 +183,7 @@ export default function ProductsPage() {
             <div style={styles.container}>
                 <div style={styles.errorState}>
                     <p>{error}</p>
-                    <button
-                        onClick={loadProducts}
-                        style={styles.retryButton}
-                    >
+                    <button onClick={loadProducts} style={styles.retryButton}>
                         Retry
                     </button>
                 </div>
@@ -230,7 +195,7 @@ export default function ProductsPage() {
         <Layout>
             <div style={styles.container}>
 
-                {/* Page Header */}
+                {/* Header */}
                 <div style={styles.header}>
                     <div>
                         <h1 style={styles.title}>Products</h1>
@@ -238,8 +203,8 @@ export default function ProductsPage() {
                             {products.length} total
                             {lowStockCount > 0 && (
                                 <span style={styles.lowStockBadge}>
-                  {lowStockCount} low stock
-                </span>
+                                    {lowStockCount} low stock
+                                </span>
                             )}
                         </p>
                     </div>
@@ -256,9 +221,7 @@ export default function ProductsPage() {
 
                 {/* Success message */}
                 {successMessage && (
-                    <div style={styles.success}>
-                        {successMessage}
-                    </div>
+                    <div style={styles.success}>{successMessage}</div>
                 )}
 
                 {/* Add Product Form */}
@@ -271,36 +234,33 @@ export default function ProductsPage() {
                         )}
 
                         <form onSubmit={handleAddProduct}>
-                            <div style={styles.formGrid}>
 
+                            {/* Row 1: Name + SKU */}
+                            <div style={styles.formGrid}>
                                 <div style={styles.field}>
-                                    <label style={styles.label}>
-                                        Product Name *
-                                    </label>
+                                    <label style={styles.label}>Product Name *</label>
                                     <input
                                         style={styles.input}
                                         value={form.name}
-                                        onChange={e => setForm({
-                                            ...form, name: e.target.value
-                                        })}
+                                        onChange={e => setForm({ ...form, name: e.target.value })}
                                         placeholder="Red T-Shirt"
                                         required
                                     />
                                 </div>
-
                                 <div style={styles.field}>
                                     <label style={styles.label}>SKU *</label>
                                     <input
                                         style={styles.input}
                                         value={form.sku}
-                                        onChange={e => setForm({
-                                            ...form, sku: e.target.value
-                                        })}
+                                        onChange={e => setForm({ ...form, sku: e.target.value })}
                                         placeholder="TSHIRT-RED-L"
                                         required
                                     />
                                 </div>
+                            </div>
 
+                            {/* Row 2: Price + Initial Stock */}
+                            <div style={{ ...styles.formGrid, marginTop: '16px' }}>
                                 <div style={styles.field}>
                                     <label style={styles.label}>Price ($) *</label>
                                     <input
@@ -309,34 +269,61 @@ export default function ProductsPage() {
                                         step="0.01"
                                         min="0"
                                         value={form.price}
-                                        onChange={e => setForm({
-                                            ...form, price: e.target.value
-                                        })}
+                                        onChange={e => setForm({ ...form, price: e.target.value })}
                                         placeholder="29.99"
                                         required
                                     />
                                 </div>
-
                                 <div style={styles.field}>
-                                    <label style={styles.label}>
-                                        Initial Stock *
-                                    </label>
+                                    <label style={styles.label}>Initial Stock *</label>
                                     <input
                                         style={styles.input}
                                         type="number"
                                         min="0"
                                         value={form.initialStock}
-                                        onChange={e => setForm({
-                                            ...form, initialStock: e.target.value
-                                        })}
+                                        onChange={e => setForm({ ...form, initialStock: e.target.value })}
                                         placeholder="100"
                                         required
                                     />
                                 </div>
-
                             </div>
 
-                            {/* Image upload */}
+                            {/* Row 3: Warehouse Aisle + Shelf */}
+                            <div style={styles.warehouseSection}>
+                                <div style={styles.warehouseLabel}>
+                                    📦 Warehouse Location
+                                </div>
+                                <div style={styles.formGrid}>
+                                    <div style={styles.field}>
+                                        <label style={styles.label}>Aisle</label>
+                                        <select
+                                            value={aisle}
+                                            onChange={e => setAisle(e.target.value)}
+                                            style={styles.input}
+                                        >
+                                            <option value="A">Aisle A</option>
+                                            <option value="B">Aisle B</option>
+                                            <option value="C">Aisle C</option>
+                                            <option value="D">Aisle D</option>
+                                            <option value="E">Aisle E</option>
+                                        </select>
+                                    </div>
+                                    <div style={styles.field}>
+                                        <label style={styles.label}>Shelf</label>
+                                        <select
+                                            value={shelf}
+                                            onChange={e => setShelf(e.target.value)}
+                                            style={styles.input}
+                                        >
+                                            {['1','2','3','4','5','6','7','8','9','10'].map(n => (
+                                                <option key={n} value={n}>Shelf {n}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Row 4: Image upload */}
                             <div style={{ ...styles.field, marginTop: '16px' }}>
                                 <label style={styles.label}>
                                     Product Image (optional)
@@ -344,22 +331,17 @@ export default function ProductsPage() {
                                 <input
                                     type="file"
                                     accept="image/*"
-                                    onChange={e =>
-                                        setSelectedImage(
-                                            e.target.files?.[0] ?? null
-                                        )
-                                    }
+                                    onChange={e => setSelectedImage(e.target.files?.[0] ?? null)}
                                     style={styles.fileInput}
                                 />
                                 {selectedImage && (
                                     <p style={styles.fileSelected}>
-                                        Selected: {selectedImage.name}
-                                        ({(selectedImage.size / 1024).toFixed(1)} KB)
+                                        Selected: {selectedImage.name} ({(selectedImage.size / 1024).toFixed(1)} KB)
                                     </p>
                                 )}
                             </div>
 
-                            {/* Submit button */}
+                            {/* Submit */}
                             <div style={styles.formActions}>
                                 <button
                                     type="submit"
@@ -380,7 +362,7 @@ export default function ProductsPage() {
                     </div>
                 )}
 
-                {/* Search bar */}
+                {/* Search */}
                 <div style={styles.searchBar}>
                     <input
                         style={styles.searchInput}
@@ -389,10 +371,7 @@ export default function ProductsPage() {
                         placeholder="Search by name or SKU..."
                     />
                     {search && (
-                        <button
-                            onClick={() => setSearch('')}
-                            style={styles.clearSearch}
-                        >
+                        <button onClick={() => setSearch('')} style={styles.clearSearch}>
                             Clear
                         </button>
                     )}
@@ -424,66 +403,44 @@ export default function ProductsPage() {
                                     key={product.id}
                                     style={{
                                         ...styles.tableRow,
-                                        backgroundColor: index % 2 === 0
-                                            ? 'white'
-                                            : '#f9fafb'
+                                        backgroundColor: index % 2 === 0 ? 'white' : '#f9fafb'
                                     }}
                                 >
-                                    {/* Product name */}
                                     <td style={styles.td}>
-                                        <div style={styles.productName}>
-                                            {product.name}
-                                        </div>
+                                        <div style={styles.productName}>{product.name}</div>
                                     </td>
-
-                                    {/* SKU */}
                                     <td style={styles.td}>
                                         <span style={styles.sku}>{product.sku}</span>
                                     </td>
-
-                                    {/* Price */}
                                     <td style={styles.td}>
-                      <span style={styles.price}>
-                        ${product.price.toFixed(2)}
-                      </span>
+                                        <span style={styles.price}>${product.price.toFixed(2)}</span>
                                     </td>
-
-                                    {/* Stock with warning */}
                                     <td style={styles.td}>
-                      <span style={{
-                          ...styles.stock,
-                          color: product.stockQuantity < 10
-                              ? '#ef4444'
-                              : product.stockQuantity < 20
-                                  ? '#f59e0b'
-                                  : '#10b981'
-                      }}>
-                        {product.stockQuantity}
-                          {product.stockQuantity < 10 && ' ⚠️'}
-                      </span>
+                                            <span style={{
+                                                ...styles.stock,
+                                                color: product.stockQuantity < 10
+                                                    ? '#ef4444'
+                                                    : product.stockQuantity < 20
+                                                        ? '#f59e0b'
+                                                        : '#10b981'
+                                            }}>
+                                                {product.stockQuantity}
+                                                {product.stockQuantity < 10 && ' ⚠️'}
+                                            </span>
                                     </td>
-
-                                    {/* Active status */}
                                     <td style={styles.td}>
-                      <span style={{
-                          ...styles.statusBadge,
-                          backgroundColor: product.isActive
-                              ? '#d1fae5'
-                              : '#fee2e2',
-                          color: product.isActive
-                              ? '#065f46'
-                              : '#991b1b'
-                      }}>
-                        {product.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                                            <span style={{
+                                                ...styles.statusBadge,
+                                                backgroundColor: product.isActive ? '#d1fae5' : '#fee2e2',
+                                                color: product.isActive ? '#065f46' : '#991b1b'
+                                            }}>
+                                                {product.isActive ? 'Active' : 'Inactive'}
+                                            </span>
                                     </td>
-
-                                    {/* Date added */}
                                     <td style={styles.td}>
-                      <span style={styles.date}>
-                        {new Date(product.createdAt)
-                            .toLocaleDateString()}
-                      </span>
+                                            <span style={styles.date}>
+                                                {new Date(product.createdAt).toLocaleDateString()}
+                                            </span>
                                     </td>
                                 </tr>
                             ))}
@@ -495,8 +452,6 @@ export default function ProductsPage() {
         </Layout>
     );
 }
-
-// ── Styles ────────────────────────────────────────────────────
 
 const styles: Record<string, React.CSSProperties> = {
     container: {
@@ -577,6 +532,19 @@ const styles: Record<string, React.CSSProperties> = {
         gridTemplateColumns: 'repeat(2, 1fr)',
         gap: '16px'
     },
+    warehouseSection: {
+        marginTop: '20px',
+        padding: '16px',
+        backgroundColor: '#f8f9ff',
+        borderRadius: '8px',
+        border: '1px solid #e5e7eb'
+    },
+    warehouseLabel: {
+        fontSize: '13px',
+        fontWeight: '600',
+        color: '#4f46e5',
+        marginBottom: '12px'
+    },
     field: {
         display: 'flex',
         flexDirection: 'column',
@@ -592,7 +560,8 @@ const styles: Record<string, React.CSSProperties> = {
         borderRadius: '8px',
         border: '1px solid #e5e7eb',
         fontSize: '14px',
-        outline: 'none'
+        outline: 'none',
+        backgroundColor: 'white'
     },
     fileInput: {
         padding: '8px 0',
@@ -666,8 +635,7 @@ const styles: Record<string, React.CSSProperties> = {
         borderBottom: '1px solid #e5e7eb'
     },
     tableRow: {
-        borderBottom: '1px solid #f3f4f6',
-        transition: 'background-color 0.1s'
+        borderBottom: '1px solid #f3f4f6'
     },
     td: {
         padding: '14px 16px',

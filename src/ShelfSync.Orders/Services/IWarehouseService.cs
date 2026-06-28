@@ -22,6 +22,13 @@ public interface IWarehouseService
     Task<int> GetInventoryLevelAsync(
         Guid productId,
         Guid tenantId);
+    
+    Task<(bool Success, string Message)> CreateLocationAsync(
+        Guid productId,
+        Guid tenantId,
+        int initialQuantity,
+        string aisle = "A",
+        string shelf = "1");
 }
 
 // Simple result object returned from ReserveStock
@@ -29,3 +36,5 @@ public record StockReservationResult(
     bool Success,
     string Message,
     int RemainingQuantity);
+    
+    

@@ -20,22 +20,8 @@ builder.Services.AddGrpc(options =>
     options.EnableDetailedErrors =
         builder.Environment.IsDevelopment();
 });
-// Configure Kestrel to use HTTP/2 for gRPC
-builder.WebHost.ConfigureKestrel(options =>
-{
-    // HTTP/2 without TLS — for development only
-    // Production should use HTTPS with HTTP/2
-    options.ListenLocalhost(5003, listenOptions =>
-    {
-        listenOptions.Protocols =
-            Microsoft.AspNetCore.Server.Kestrel.Core
-                .HttpProtocols.Http2;
-    });
-});
 
 var app = builder.Build();
-
-
 
 // Seed warehouse data on startup
 using (var scope = app.Services.CreateScope())

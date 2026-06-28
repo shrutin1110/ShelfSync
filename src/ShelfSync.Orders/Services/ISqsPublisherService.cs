@@ -10,5 +10,12 @@ public interface ISqsPublisher
     Task PublishOrderShippedAsync(Events.OrderShippedEvent shippedEvent);
 
     // Publish event to generate invoice PDF
-    Task PublishInvoiceGenerateAsync(Guid orderId, Guid tenantId);
+    Task PublishInvoiceGenerateAsync(
+        Guid orderId,
+        Guid tenantId,
+        string tenantName,
+        decimal totalAmount,
+        DateTime createdAt,
+        string? notes,
+        List<InvoiceItemDto> items);
 }

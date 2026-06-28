@@ -159,13 +159,20 @@ builder.Services
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins("http://localhost:5173", 
+            "http://localhost:3000" )
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials());
 });
 
 var app = builder.Build();
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider
+        .GetRequiredService<OrdersDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 app.UseCors("AllowFrontend");
 app.UseAuthentication();

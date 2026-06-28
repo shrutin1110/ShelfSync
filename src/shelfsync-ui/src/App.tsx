@@ -5,6 +5,9 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ProductsPage from './pages/ProductsPage';
 import OrdersPage from './pages/OrdersPage';
+import StorefrontPage from './pages/StoreFrontPage';
+
+
 
 export default function App() {
     return (
@@ -40,6 +43,8 @@ export default function App() {
                         path="/"
                         element={<Navigate to="/dashboard" replace />}
                     />
+                    // This route must exist — no ProtectedRoute wrapper
+                    <Route path="/storefront" element={<StorefrontPage />} />
                 </Routes>
             </BrowserRouter>
         </AuthProvider>

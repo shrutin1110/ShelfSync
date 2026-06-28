@@ -1,0 +1,84 @@
+﻿services:
+
+  auth:
+    build:
+      context: .
+      dockerfile: src/ShelfSync.Auth/Dockerfile
+    container_name: shelfsync-auth-app
+    ports:
+      - "5001:5001"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=host.docker.internal;Port=5432;Database=shelfsync;Username=shelfsync;Password=shelfsync123"
+      JwtSettings__SecretKey: "shelfsync-super-secret-key-minimum-32-characters-long!!"
+      JwtSettings__Issuer: ShelfSync
+      JwtSettings__Audience: ShelfSync-Client
+      JwtSettings__AccessTokenExpiryMinutes: "15"
+      JwtSettings__RefreshTokenExpiryDays: "7"
+      ASPNETCORE_ENVIRONMENT: Development
+
+  warehouse:
+    build:
+      context: .
+      dockerfile: src/ShelfSync.Warehouse/Dockerfile
+    container_name: shelfsync-warehouse-app
+    platform: linux/amd64
+    ports:
+      - "5003:5003"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=host.docker.internal;Port=5432;Database=shelfsync;Username=shelfsync;Password=shelfsync123"
+      ASPNETCORE_ENVIRONMENT: Development
+
+  orders:
+    build:
+      context: .
+      dockerfile: src/ShelfSync.Orders/Dockerfile
+    container_name: shelfsync-orders-app
+    platform: linux/amd64
+    ports:
+      - "5002:5002"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=host.docker.internal;Port=5432;Database=shelfsync;Username=shelfsync;Password=shelfsync123"
+      ConnectionStrings__Redis: "host.docker.internal:6379"
+      JwtSettings__SecretKey: "shelfsync-super-secret-key-minimum-32-characters-long!!"
+      JwtSettings__Issuer: ShelfSync
+      JwtSettings__Audience: ShelfSync-Client
+      GrpcSettings__WarehouseServiceUrl: "http://warehouse:5003"
+      AWS__AccessKeyId: ${AWS_ACCESS_KEY_ID}
+      AWS__SecretAccessKey: ${AWS_SECRET_ACCESS_KEY}
+      AWS__S3Region: "us-east-1"
+      AWS__SqsRegion: "us-east-1"
+      AWS__BucketName: "shelfsync-dev-assets-tenants"
+      SQS__OrderCreatedQueueUrl: "https://sqs.us-east-1.amazonaws.com/526362560542/shelfsync-order-created"
+      SQS__OrderShippedQueueUrl: "https://sqs.us-east-1.amazonaws.com/526362560542/shelfsync-order-shipped"
+      SQS__InvoiceGenerateQueueUrl: "https://sqs.us-east-1.amazonaws.com/526362560542/shelfsync-invoice-generate"
+      SQS__InventoryLowQueueUrl: "https://sqs.us-east-1.amazonaws.com/526362560542/shelfsync-inventory-low"
+      ASPNETCORE_ENVIRONMENT: Development
+    depends_on:
+      - warehouse
+
+  notifications:
+    build:
+      context: .
+      dockerfile: src/ShelfSync.Notifications/Dockerfile
+    container_name: shelfsync-notifications-app
+    ports:
+      - "5004:5004"
+    environment:
+      AWS__AccessKeyId: ${AWS_ACCESS_KEY_ID}
+      AWS__SecretAccessKey: ${AWS_SECRET_ACCESS_KEY}
+      AWS__Region: "us-east-1"
+      SQS__OrderCreatedQueueUrl: "https://sqs.us-east-1.amazonaws.com/526362560542/shelfsync-order-created"
+      SQS__OrderShippedQueueUrl: "https://sqs.us-east-1.amazonaws.com/526362560542/shelfsync-order-shipped"
+      ASPNETCORE_ENVIRONMENT: Development
+
+  frontend:
+    build:
+      context: src/shelfsync-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_AUTH_API: "http://localhost:5001"
+        VITE_GRAPHQL_API: "http://localhost:5002/graphql"
+        VITE_WS_API: "ws://localhost:5002/graphql"
+    container_name: shelfsync-frontend-app
+    ports:
+      - "3000:80"

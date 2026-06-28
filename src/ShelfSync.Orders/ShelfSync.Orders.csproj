@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>ba9f7390-d863-4bc1-ae8d-8148fe0f838e</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,6 +32,12 @@
   <ItemGroup>
     <ProjectReference Include="..\ShelfSync.Shared\ShelfSync.Shared.csproj" />
     <ProjectReference Include="..\ShelfSync.Warehouse\ShelfSync.Warehouse.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\.dockerignore">
+      <Link>.dockerignore</Link>
+    </Content>
   </ItemGroup>
 
 </Project>

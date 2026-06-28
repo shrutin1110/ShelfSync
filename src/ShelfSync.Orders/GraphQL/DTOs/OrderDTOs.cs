@@ -28,7 +28,9 @@ public record AddProductInput(
     string Name,
     string SKU,
     decimal Price,
-    int InitialStock);
+    int InitialStock,
+    string Aisle = "A",
+    string Shelf = "1");
     
 // Add to OrderDTOs.cs
 public record GetUploadUrlInput(

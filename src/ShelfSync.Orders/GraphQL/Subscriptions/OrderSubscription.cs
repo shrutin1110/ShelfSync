@@ -20,4 +20,10 @@ public class OrderSubscription
         // [EventMessage] is the data published to this topic
         // It is the Order object the mutation published
         [EventMessage] Order order) => order;
+    
+    //fires when a new order is placed
+    [Subscribe]
+    [Topic("NewOrderPlaced")]
+    public Order OnNewOrderPlaced(
+        [EventMessage] Order order) => order;
 }

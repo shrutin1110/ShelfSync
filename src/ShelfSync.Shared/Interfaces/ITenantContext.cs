@@ -22,4 +22,7 @@ public interface ITenantContext
     // Whether the current request is from an authenticated tenant
     // Some endpoints are public (no token) — IsAuthenticated is false there
     bool IsAuthenticated { get; }
+    
+    string Role { get; }
+    Guid UserId { get; }
 }

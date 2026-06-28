@@ -14,150 +14,165 @@ namespace ShelfSync.Orders.GraphQL.Mutations;
 public class OrderMutation
 {
     public async Task<PlaceOrderResult> PlaceOrder(
-    PlaceOrderInput input,
-    OrdersDbContext db,
-    ITenantContext tenantContext,
-    IWarehouseService warehouseService,
-    ISqsPublisher sqsPublisher,
-    [Service] IHttpContextAccessor httpContextAccessor)
-{
-    // Read the real UserId from the JWT token
-    var userIdClaim = httpContextAccessor.HttpContext?
-        .User?.FindFirst(System.Security.Claims.ClaimTypes
-            .NameIdentifier)?.Value;
-    
-    if (string.IsNullOrEmpty(userIdClaim))
+        PlaceOrderInput input,
+        OrdersDbContext db,
+        ITenantContext tenantContext,
+        IWarehouseService warehouseService,
+        ISqsPublisher sqsPublisher,
+        [Service] IHttpContextAccessor httpContextAccessor)
     {
-        return new PlaceOrderResult(
-            Success: false,
-            ErrorMessage: "User not authenticated.",
-            OrderId: null);
-    }
+        // Read the real UserId from the JWT token
+        var userIdClaim = httpContextAccessor.HttpContext?
+            .User?.FindFirst(System.Security.Claims.ClaimTypes
+                .NameIdentifier)?.Value;
 
-    var userId = Guid.Parse(userIdClaim);
-    if (input.Items is null || !input.Items.Any())
-    {
-        return new PlaceOrderResult(
-            Success: false,
-            ErrorMessage: "Order must have at least one item.",
-            OrderId: null);
-    }
-
-    decimal totalAmount = 0;
-    var orderItems = new List<OrderItem>();
-    var reservedItems = new List<(Guid ProductId, int Quantity)>();
-
-    // Generate order ID upfront
-    // We need it for the gRPC reservation call
-    var orderId = Guid.NewGuid();
-
-    foreach (var item in input.Items)
-    {
-        // Verify product exists in database
-        var product = await db.Products
-            .FirstOrDefaultAsync(p =>
-                p.Id == item.ProductId &&
-                p.TenantId == tenantContext.TenantId &&
-                p.IsActive);
-
-        if (product is null)
+        if (string.IsNullOrEmpty(userIdClaim))
         {
-            // Release any already reserved stock
-            // before returning error
-            await ReleaseReservedStock(
-                reservedItems,
-                tenantContext.TenantId,
-                orderId,
-                warehouseService);
-
             return new PlaceOrderResult(
                 Success: false,
-                ErrorMessage:
+                ErrorMessage: "User not authenticated.",
+                OrderId: null);
+        }
+
+        var userId = Guid.Parse(userIdClaim);
+        if (input.Items is null || !input.Items.Any())
+        {
+            return new PlaceOrderResult(
+                Success: false,
+                ErrorMessage: "Order must have at least one item.",
+                OrderId: null);
+        }
+
+        decimal totalAmount = 0;
+        var orderItems = new List<OrderItem>();
+        var reservedItems = new List<(Guid ProductId, int Quantity)>();
+
+        // Generate order ID upfront
+        // We need it for the gRPC reservation call
+        var orderId = Guid.NewGuid();
+
+        foreach (var item in input.Items)
+        {
+            // Verify product exists in database
+            var product = await db.Products
+                .FirstOrDefaultAsync(p =>
+                    p.Id == item.ProductId &&
+                    p.TenantId == tenantContext.TenantId &&
+                    p.IsActive);
+
+            if (product is null)
+            {
+                // Release any already reserved stock
+                // before returning error
+                await ReleaseReservedStock(
+                    reservedItems,
+                    tenantContext.TenantId,
+                    orderId,
+                    warehouseService);
+
+                return new PlaceOrderResult(
+                    Success: false,
+                    ErrorMessage:
                     $"Product {item.ProductId} not found.",
-                OrderId: null);
+                    OrderId: null);
+            }
+
+            // ── GRPC CALL TO WAREHOUSE ─────────────────────────
+            // This is the key new step
+            // Call Warehouse service to reserve stock
+            var reservation = await warehouseService
+                .ReserveStockAsync(
+                    productId: product.Id,
+                    tenantId: tenantContext.TenantId,
+                    quantity: item.Quantity,
+                    orderId: orderId);
+
+            if (!reservation.Success)
+            {
+                // Stock not available
+                // Release any stock we already reserved
+                await ReleaseReservedStock(
+                    reservedItems,
+                    tenantContext.TenantId,
+                    orderId,
+                    warehouseService);
+
+                return new PlaceOrderResult(
+                    Success: false,
+                    ErrorMessage: reservation.Message,
+                    OrderId: null);
+            }
+
+            // Track what we reserved so we can release
+            // if a later item fails
+            reservedItems.Add((product.Id, item.Quantity));
+
+            var orderItem = new OrderItem
+            {
+                ProductId = product.Id,
+                Quantity = item.Quantity,
+                UnitPrice = product.Price
+            };
+
+            orderItems.Add(orderItem);
+            totalAmount += product.Price * item.Quantity;
         }
 
-        // ── GRPC CALL TO WAREHOUSE ─────────────────────────
-        // This is the key new step
-        // Call Warehouse service to reserve stock
-        var reservation = await warehouseService
-            .ReserveStockAsync(
-                productId: product.Id,
-                tenantId: tenantContext.TenantId,
-                quantity: item.Quantity,
-                orderId: orderId);
-
-        if (!reservation.Success)
+        // All items reserved successfully
+        // Now save the order to database
+        var order = new Order
         {
-            // Stock not available
-            // Release any stock we already reserved
-            await ReleaseReservedStock(
-                reservedItems,
-                tenantContext.TenantId,
-                orderId,
-                warehouseService);
-
-            return new PlaceOrderResult(
-                Success: false,
-                ErrorMessage: reservation.Message,
-                OrderId: null);
-        }
-
-        // Track what we reserved so we can release
-        // if a later item fails
-        reservedItems.Add((product.Id, item.Quantity));
-
-        var orderItem = new OrderItem
-        {
-            ProductId = product.Id,
-            Quantity = item.Quantity,
-            UnitPrice = product.Price
+            Id = orderId, // use the same ID we used for reservations
+            TenantId = tenantContext.TenantId,
+            UserId = userId,
+            Status = OrderStatus.Confirmed, // Confirmed because stock is reserved
+            TotalAmount = totalAmount,
+            Notes = input.Notes,
+            Items = orderItems
         };
 
-        orderItems.Add(orderItem);
-        totalAmount += product.Price * item.Quantity;
-    }
+        db.Orders.Add(order);
+        await db.SaveChangesAsync();
 
-    // All items reserved successfully
-    // Now save the order to database
-    var order = new Order
-    {
-        Id = orderId, // use the same ID we used for reservations
-        TenantId = tenantContext.TenantId,
-        UserId = userId,
-        Status = OrderStatus.Confirmed, // Confirmed because stock is reserved
-        TotalAmount = totalAmount,
-        Notes = input.Notes,
-        Items = orderItems
-    };
 
-    db.Orders.Add(order);
-    await db.SaveChangesAsync();
+
+        // ── PUBLISH SQS EVENTS ────────────────────────────────
+        // Build the event with order details
+        var orderCreatedEvent = new OrderCreatedEvent(
+            EventId: Guid.NewGuid(),
+            OrderId: order.Id,
+            TenantId: order.TenantId,
+            UserId: order.UserId,
+            TotalAmount: order.TotalAmount,
+            CreatedAt: order.CreatedAt,
+            Items: orderItems.Select(oi => new OrderCreatedEventItem(
+                ProductId: oi.ProductId,
+                ProductName: db.Products
+                    .First(p => p.Id == oi.ProductId).Name,
+                Quantity: oi.Quantity,
+                UnitPrice: oi.UnitPrice
+            )).ToList()
+        );
+
+        // Publish to SQS — fire and forget
+        // We do not await these to keep the response fast
+        // Even if SQS publishing fails, the order is already saved
+        _ = sqsPublisher.PublishOrderCreatedAsync(orderCreatedEvent);
+        _ = sqsPublisher.PublishInvoiceGenerateAsync(
+            orderId: order.Id,
+            tenantId: order.TenantId,
+            tenantName: tenantContext.TenantName,
+            totalAmount: order.TotalAmount,
+            createdAt: order.CreatedAt,
+            notes: order.Notes,
+            items: orderItems.Select(oi =>
+                new InvoiceItemDto(
+                    ProductName: db.Products
+                        .First(p => p.Id == oi.ProductId).Name,
+                    Quantity: oi.Quantity,
+                    UnitPrice: oi.UnitPrice
+                )).ToList());
     
-    // ── PUBLISH SQS EVENTS ────────────────────────────────
-    // Build the event with order details
-    var orderCreatedEvent = new OrderCreatedEvent(
-        EventId: Guid.NewGuid(),
-        OrderId: order.Id,
-        TenantId: order.TenantId,
-        UserId: order.UserId,
-        TotalAmount: order.TotalAmount,
-        CreatedAt: order.CreatedAt,
-        Items: orderItems.Select(oi => new OrderCreatedEventItem(
-            ProductId: oi.ProductId,
-            ProductName: db.Products
-                .First(p => p.Id == oi.ProductId).Name,
-            Quantity: oi.Quantity,
-            UnitPrice: oi.UnitPrice
-        )).ToList()
-    );
-
-    // Publish to SQS — fire and forget
-    // We do not await these to keep the response fast
-    // Even if SQS publishing fails, the order is already saved
-    _ = sqsPublisher.PublishOrderCreatedAsync(orderCreatedEvent);
-    _ = sqsPublisher.PublishInvoiceGenerateAsync(
-        order.Id, order.TenantId);
 
     return new PlaceOrderResult(
         Success: true,
@@ -268,7 +283,9 @@ private async Task ReleaseReservedStock(
         AddProductInput input,
         OrdersDbContext db,
         ITenantContext tenantContext,
-        IProductService productService) // ← add this parameter
+        IProductService productService ,
+        IWarehouseService warehouseService,// ← add this parameter
+        [Service] ITopicEventSender eventSender)
     {
         var product = new Product
         {
@@ -282,6 +299,32 @@ private async Task ReleaseReservedStock(
 
         db.Products.Add(product);
         await db.SaveChangesAsync();
+        
+        // Notify all subscribed clients that a new order arrived
+        await eventSender.SendAsync("NewOrderPlaced", product);
+        
+        // Auto-create warehouse location for this product
+        // So stock reservation works immediately when orders are placed
+        var warehouseResult = await warehouseService
+            .CreateLocationAsync(
+                productId: product.Id,
+                tenantId: tenantContext.TenantId,
+                initialQuantity: input.InitialStock,
+                aisle: input.Aisle,
+                shelf: input.Shelf);
+        
+        if (!warehouseResult.Success)
+        {
+            Console.WriteLine(
+                $"Warning: Could not create warehouse location " +
+                $"for product {product.Id}: {warehouseResult.Message}");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"Warehouse location created for product " +
+                $"{product.Name} with {input.InitialStock} units");
+        }
 
         // Invalidate the product catalog cache for this tenant
         // Next products query will rebuild from database

@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useAuth } from '../auth/AuthContext';
 import type { AuthResponse } from '../types';
 
-const AUTH_API = 'http://localhost:5000/api/auth';
+const AUTH_API = (import.meta.env.VITE_AUTH_API ?? 'http://localhost:5000') + '/api/auth';
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -26,26 +26,22 @@ export default function LoginPage() {
             let response;
 
             if (isRegister) {
-                // Register new account
                 response = await axios.post<AuthResponse>(
                     `${AUTH_API}/register`,
                     { email, password, companyName }
                 );
             } else {
-                // Login existing account
                 response = await axios.post<AuthResponse>(
                     `${AUTH_API}/login`,
                     { email, password }
                 );
             }
 
-            // Store tokens and update auth state
             login(
                 response.data.accessToken,
                 response.data.refreshToken
             );
 
-            // Redirect to dashboard
             navigate('/dashboard');
         } catch (err: any) {
             setError(
@@ -57,34 +53,25 @@ export default function LoginPage() {
         }
     };
 
-    const handleGoogleLogin = () => {
-        // Redirect to .NET Google OAuth endpoint
-        window.location.href =
-            'https://localhost:5001/api/auth/google';
-    };
-
     return (
         <div style={styles.container}>
             <div style={styles.card}>
 
-                {/* Logo and title */}
                 <div style={styles.header}>
                     <h1 style={styles.logo}>📦 ShelfSync</h1>
                     <p style={styles.subtitle}>
                         {isRegister
-                            ? 'Create your account'
+                            ? 'Create your business account'
                             : 'Sign in to your account'}
                     </p>
                 </div>
 
-                {/* Error message */}
                 {error && (
                     <div style={styles.error}>
                         {error}
                     </div>
                 )}
 
-                {/* Login / Register form */}
                 <form onSubmit={handleSubmit} style={styles.form}>
 
                     {isRegister && (
@@ -139,21 +126,6 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-                {/* Divider */}
-                <div style={styles.divider}>
-                    <span style={styles.dividerText}>or</span>
-                </div>
-
-                {/* Google OAuth button */}
-                <button
-                    onClick={handleGoogleLogin}
-                    style={styles.googleButton}
-                >
-                    <span style={{ marginRight: '8px' }}>G</span>
-                    Sign in with Google
-                </button>
-
-                {/* Toggle register/login */}
                 <p style={styles.toggle}>
                     {isRegister
                         ? 'Already have an account? '
@@ -168,12 +140,19 @@ export default function LoginPage() {
                         {isRegister ? 'Sign In' : 'Register'}
                     </button>
                 </p>
+
+                <p style={styles.storefrontLink}>
+                    Want to place an order?{' '}
+                    <a href="/storefront" style={styles.storefrontAnchor}>
+                        Visit the Storefront
+                    </a>
+                </p>
+
             </div>
         </div>
     );
 }
 
-// Inline styles — clean, no CSS files needed for now
 const styles: Record<string, React.CSSProperties> = {
     container: {
         minHeight: '100vh',
@@ -249,33 +228,6 @@ const styles: Record<string, React.CSSProperties> = {
         cursor: 'pointer',
         marginTop: '8px'
     },
-    divider: {
-        display: 'flex',
-        alignItems: 'center',
-        margin: '24px 0',
-        gap: '12px'
-    },
-    dividerText: {
-        color: '#999',
-        fontSize: '14px',
-        padding: '0 8px',
-        backgroundColor: 'white',
-        position: 'relative'
-    },
-    googleButton: {
-        width: '100%',
-        padding: '12px',
-        backgroundColor: 'white',
-        color: '#333',
-        border: '1px solid #ddd',
-        borderRadius: '8px',
-        fontSize: '15px',
-        fontWeight: '500',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
     toggle: {
         textAlign: 'center',
         marginTop: '24px',
@@ -289,5 +241,16 @@ const styles: Record<string, React.CSSProperties> = {
         cursor: 'pointer',
         fontWeight: '600',
         fontSize: '14px'
+    },
+    storefrontLink: {
+        textAlign: 'center',
+        marginTop: '16px',
+        fontSize: '13px',
+        color: '#9ca3af'
+    },
+    storefrontAnchor: {
+        color: '#4f46e5',
+        fontWeight: '600',
+        textDecoration: 'none'
     }
 };

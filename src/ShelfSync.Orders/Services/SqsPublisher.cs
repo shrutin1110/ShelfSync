@@ -6,6 +6,11 @@ using ShelfSync.Orders.Events;
 using ShelfSync.Orders.Settings;
 
 namespace ShelfSync.Orders.Services;
+public record InvoiceItemDto(
+    string ProductName,
+    int Quantity,
+    decimal UnitPrice
+);
 
 public class SqsPublisher : ISqsPublisher
 {
@@ -43,14 +48,23 @@ public class SqsPublisher : ISqsPublisher
 
     public async Task PublishInvoiceGenerateAsync(
         Guid orderId,
-        Guid tenantId)
+        Guid tenantId,
+        string tenantName,
+        decimal totalAmount,
+        DateTime createdAt,
+        string? notes,
+        List<InvoiceItemDto> items)
     {
         var message = new
         {
             EventId = Guid.NewGuid(),
             OrderId = orderId,
             TenantId = tenantId,
-            RequestedAt = DateTime.UtcNow
+            TenantName = tenantName,
+            TotalAmount = totalAmount,
+            CreatedAt = createdAt,
+            Notes = notes,
+            Items = items
         };
 
         await PublishMessageAsync(

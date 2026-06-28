@@ -16,6 +16,11 @@ public class WarehouseGrpcClient : IWarehouseService
         ILogger<WarehouseGrpcClient> logger)
     {
         _logger = logger;
+        
+        // Required for HTTP/2 without TLS
+        AppContext.SetSwitch(
+            "System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport",
+            true);
 
         var warehouseUrl = configuration
             ["GrpcSettings:WarehouseServiceUrl"]!;
@@ -117,6 +122,36 @@ public class WarehouseGrpcClient : IWarehouseService
             _logger.LogError(ex,
                 "gRPC GetInventoryLevel failed");
             return 0;
+        }
+    }
+    
+    public async Task<(bool Success, string Message)>
+        CreateLocationAsync(
+            Guid productId,
+            Guid tenantId,
+            int initialQuantity,
+            string aisle = "A",
+            string shelf = "1")
+    {
+        try
+        {
+            var response = await _client.CreateLocationAsync(
+                new CreateLocationRequest
+                {
+                    ProductId = productId.ToString(),
+                    TenantId = tenantId.ToString(),
+                    InitialQuantity = initialQuantity,
+                    Aisle = aisle,
+                    Shelf = shelf
+                });
+
+            return (response.Success, response.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to create warehouse location");
+            return (false, ex.Message);
         }
     }
 }

@@ -39,6 +39,30 @@ const UPDATE_ORDER_STATUS = `
 `;
 
 // Subscription — server pushes this when any order changes
+
+const NEW_ORDER_PLACED = `
+  subscription {
+    onNewOrderPlaced {
+      id
+      status
+      totalAmount
+      notes
+      createdAt
+      updatedAt
+      items {
+        id
+        quantity
+        unitPrice
+        product {
+          id
+          name
+          sku
+        }
+      }
+    }
+  }
+`;
+ 
 const ORDER_STATUS_CHANGED = `
   subscription {
     onOrderStatusChanged {
@@ -187,12 +211,33 @@ export default function OrdersPage() {
                 `Last update: ${new Date().toLocaleTimeString()}`
             );
         },
+        
 
         onError: (err) => {
             console.error('Subscription failed:', err);
         }
     });
 
+    // New subscription — new orders arriving
+    useSubscription<{ onNewOrderPlaced: Order }>({
+        query: NEW_ORDER_PLACED,
+        onData: (data) => {
+            const newOrder = data.onNewOrderPlaced;
+            console.log('New order received:', newOrder.id);
+
+            // Add new order to the top of the list
+            setOrders(prev => {
+                // Check it does not already exist
+                const exists = prev.some(o => o.id === newOrder.id);
+                if (exists) return prev;
+                return [newOrder, ...prev];
+            });
+
+            setLastUpdate(
+                `New order received: ${new Date().toLocaleTimeString()}`
+            );
+        }
+    });
     // Derived state
     const filteredOrders = activeFilter === 'All'
         ? orders

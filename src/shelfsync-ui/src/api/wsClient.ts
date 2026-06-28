@@ -1,8 +1,8 @@
 import { createClient } from 'graphql-ws';
 
 const createWsClient = () => createClient({
-    url: 'ws://localhost:5002/graphql',
-
+    url: import.meta.env.VITE_WS_API
+        ?? 'ws://localhost:5002/graphql',
     connectionParams: () => {
         const token = localStorage.getItem('accessToken');
         console.log('WS connecting with token:',

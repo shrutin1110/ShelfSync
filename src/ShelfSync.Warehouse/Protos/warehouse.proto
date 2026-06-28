@@ -32,6 +32,9 @@ service WarehouseService {
   // Server streams multiple status updates back
   // "stream" keyword before return type = server streaming
   rpc TrackPickPack(TrackRequest) returns (stream PackingStatus);
+
+  rpc CreateLocation (CreateLocationRequest)
+      returns (CreateLocationResponse);
 }
 
 // ── MESSAGE DEFINITIONS ───────────────────────────────────────
@@ -97,4 +100,18 @@ message PackingStatus {
   string status = 2;      // PICKING, PACKED, READY_TO_SHIP
   string message = 3;     // human readable update
   string timestamp = 4;   // when this status occurred
+}
+
+
+message CreateLocationRequest {
+  string product_id = 1;
+  string tenant_id = 2;
+  int32 initial_quantity = 3;
+  string aisle = 4;
+  string shelf = 5;
+}
+
+message CreateLocationResponse {
+  bool success = 1;
+  string message = 2;
 }

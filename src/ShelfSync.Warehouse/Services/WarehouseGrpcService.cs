@@ -1,5 +1,6 @@
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
+using ShelfSync.Shared.Entities;
 using ShelfSync.Warehouse.Data;
 using ShelfSync.Warehouse.Grpc;
 
@@ -215,6 +216,68 @@ public class WarehouseGrpcService
             // Wait 2 seconds between status updates
             // Simulates real warehouse processing time
             await Task.Delay(2000, context.CancellationToken);
+        }
+    }
+    
+    public override async Task<CreateLocationResponse> CreateLocation(
+        CreateLocationRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            var productId = Guid.Parse(request.ProductId);
+            var tenantId = Guid.Parse(request.TenantId);
+
+            // Check if location already exists
+            var exists = await _db.WarehouseLocations
+                .AnyAsync(w =>
+                    w.ProductId == productId &&
+                    w.TenantId == tenantId);
+
+            if (exists)
+            {
+                return new CreateLocationResponse
+                {
+                    Success = true,
+                    Message = "Location already exists"
+                };
+            }
+
+            // Create new warehouse location
+            var location = new WarehouseLocation
+            {
+                Id = Guid.NewGuid(),
+                ProductId = productId,
+                TenantId = tenantId,
+                Aisle = string.IsNullOrEmpty(request.Aisle)
+                    ? "A" : request.Aisle,
+                Shelf = string.IsNullOrEmpty(request.Shelf)
+                    ? "1" : request.Shelf,
+                QuantityAvailable = request.InitialQuantity
+            };
+
+            _db.WarehouseLocations.Add(location);
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Warehouse location created for product {ProductId}",
+                productId);
+
+            return new CreateLocationResponse
+            {
+                Success = true,
+                Message = "Location created successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to create warehouse location");
+            return new CreateLocationResponse
+            {
+                Success = false,
+                Message = ex.Message
+            };
         }
     }
 }

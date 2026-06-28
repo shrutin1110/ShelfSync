@@ -1,0 +1,21 @@
+# Start all services
+docker compose up
+
+# Start in background (detached mode)
+docker compose up -d
+
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (clears database)
+docker compose down -v
+
+# View logs for a specific service
+docker compose logs auth
+docker compose logs orders -f  # -f = follow/live
+
+# Rebuild after code changes
+docker compose up --build
+
+# Run a single service
+docker compose up orders

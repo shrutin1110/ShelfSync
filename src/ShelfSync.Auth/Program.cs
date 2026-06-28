@@ -64,7 +64,8 @@ builder.Services
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
-    })
+    });
+    /*
     .AddGoogle(options =>
     {
         options.ClientId =
@@ -74,6 +75,7 @@ builder.Services
         options.CallbackPath = "/api/auth/google/callback";
         options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     });
+    */
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
@@ -87,13 +89,23 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins("http://localhost:5173",
+            "http://localhost:3000")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials());
 });
 
 var app = builder.Build();
+
+// Auto-run migrations on startup
+// This ensures the database schema is always up to date
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider
+        .GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
 
 // ── MIDDLEWARE PIPELINE ───────────────────────────────────────
 if (app.Environment.IsDevelopment())
