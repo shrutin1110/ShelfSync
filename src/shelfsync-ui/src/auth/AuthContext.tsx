@@ -73,16 +73,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
     }, []);
 
-    const login = (newAccessToken: string, newRefreshToken: string) => {
-        // Store tokens in localStorage
-        // Note: httpOnly cookies are more secure
-        // but require server-side setup
-        // localStorage is fine for development
+    const login = (
+        newAccessToken: string,
+        newRefreshToken: string
+    ) => {
+        console.log('login called');
+        console.log('token length:', newAccessToken?.length);
+
         localStorage.setItem('accessToken', newAccessToken);
         localStorage.setItem('refreshToken', newRefreshToken);
 
-        // Decode token to get user info
+        console.log('stored in localStorage:',
+            !!localStorage.getItem('accessToken'));
+
         const decoded = jwtDecode<JwtPayload>(newAccessToken);
+        console.log('decoded email:', decoded[
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'
+            ]);
 
         setAccessToken(newAccessToken);
         setUser({
@@ -92,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             tenantId: decoded.tenantId
         });
     };
-
+    
     const logout = () => {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
